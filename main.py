@@ -10,6 +10,11 @@ from src.technical_indicators import (
     add_bollinger_bands
 )
 
+from src.strategy_engine import (
+    hybrid_strategy,
+    calculate_strategy_returns
+)
+
 from src.ai_model import train_ai_model
 
 
@@ -57,7 +62,27 @@ def main():
 
     print("\n============================================\n")
 
-    # TRAIN AI MODEL
+    # STRATEGY ENGINE
+    df = hybrid_strategy(df)
+
+    df = calculate_strategy_returns(df)
+
+    # PRINT STRATEGY SIGNALS
+    print("\n=========== STRATEGY SIGNALS ===========\n")
+
+    print(
+        df[
+            [
+                "RSI_Signal",
+                "MACD_Signal_Strategy",
+                "Hybrid_Signal"
+            ]
+        ].tail()
+    )
+
+    print("\n========================================\n")
+
+    # AI MODEL
     model, acc, df_test = train_ai_model(df)
 
     # PRINT AI RESULTS
@@ -67,7 +92,25 @@ def main():
 
     print("\n==========================================\n")
 
-    # VISUALIZATION
+    # HYBRID STRATEGY GRAPH
+    plt.figure(figsize=(12, 6))
+
+    plt.plot(
+        df["Cumulative_Strategy"],
+        label="Hybrid Strategy"
+    )
+
+    plt.title("Hybrid Trading Strategy")
+
+    plt.xlabel("Time")
+
+    plt.ylabel("Cumulative Returns")
+
+    plt.legend()
+
+    plt.grid()
+
+    # AI STRATEGY GRAPH
     plt.figure(figsize=(12, 6))
 
     plt.plot(
