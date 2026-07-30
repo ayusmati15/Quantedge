@@ -1,4 +1,4 @@
-# AI Financial Market Simulator
+# Quantitative Trading
 
 A quantitative finance and AI-based trading system built using Python.
 
