@@ -1,86 +1,145 @@
 import numpy as np
-def portfolio_performance(
-    weights,
-    mean_returns,
-    covariance
-):
+from scipy.optimize import minimize
+from config import *
 
-    portfolio_return = np.sum(
-        mean_returns * weights
-    ) * 252
+# Portfolio performance
+def portfolio_performance(weights, mean_returns, covariance):
+    ret = np.sum(mean_returns * weights) * 252
+    vol = np.sqrt(weights.T @ (covariance * 252) @ weights)
+    return ret, vol
 
-    portfolio_volatility = np.sqrt(
-        np.dot(
-            weights.T,
-            np.dot(
-                covariance * 252,
-                weights
-            )
-        )
+# Sharpe Ratio
+def sharpe_ratio(weights, mean_returns, covariance):
+    ret, vol = portfolio_performance(weights, mean_returns, covariance)
+    return -(ret - RISK_FREE_RATE) / vol
+
+# Portfolio volatility
+def portfolio_volatility(weights, covariance):
+    return np.sqrt(weights.T @ (covariance * 252) @ weights)
+
+# Maximum Sharpe Portfolio
+def max_sharpe_portfolio(mean_returns, covariance):
+
+    n = len(mean_returns)
+
+    bounds = tuple((0,1) for _ in range(n))
+
+    constraints = ({
+        "type":"eq",
+        "fun":lambda w: np.sum(w)-1
+    })
+
+    initial = np.ones(n)/n
+
+    result = minimize(
+        sharpe_ratio,
+        initial,
+        args=(mean_returns,covariance),
+        method="SLSQP",
+        bounds=bounds,
+        constraints=constraints
     )
 
-    return (
-        portfolio_return,
-        portfolio_volatility
+    return result.x
+
+# Minimum Variance Portfolio
+def minimum_variance_portfolio(mean_returns, covariance):
+
+    n = len(mean_returns)
+
+    bounds = tuple((0,1) for _ in range(n))
+
+    constraints = ({
+        "type":"eq",
+        "fun":lambda w: np.sum(w)-1
+    })
+
+    initial = np.ones(n)/n
+
+    result = minimize(
+        portfolio_volatility,
+        initial,
+        args=(covariance,),
+        method="SLSQP",
+        bounds=bounds,
+        constraints=constraints
     )
 
+    return result.x
 
-def sharpe_ratio(
-    portfolio_return,
-    portfolio_volatility,
-    risk_free_rate=0.05
-):
+# Efficient Frontier
+def efficient_frontier(num_portfolios, mean_returns, covariance):
 
-    return (
-        portfolio_return
-        - risk_free_rate
-    ) / portfolio_volatility
-
-
-def generate_random_portfolios(
-    num_portfolios,
-    mean_returns,
-    covariance
-):
-
-    results = []
-
-    weights_record = []
-
-    num_assets = len(mean_returns)
+    portfolios=[]
 
     for _ in range(num_portfolios):
 
-        weights = np.random.random(
-            num_assets
+        w=np.random.random(len(mean_returns))
+        w/=w.sum()
+
+        ret,vol=portfolio_performance(
+            w,
+            mean_returns,
+            covariance
         )
 
-        weights /= np.sum(weights)
+        sr=(ret-RISK_FREE_RATE)/vol
 
-        portfolio_return, portfolio_volatility = (
-            portfolio_performance(
-                weights,
-                mean_returns,
-                covariance
-            )
-        )
+        portfolios.append([ret,vol,sr,w])
 
-        sr = sharpe_ratio(
-            portfolio_return,
-            portfolio_volatility
-        )
+    return portfolios
 
-        results.append(
-            [
-                portfolio_return,
-                portfolio_volatility,
-                sr
-            ]
-        )
+# Position sizing
+def position_size(capital, confidence):
 
-        weights_record.append(weights)
+    return capital*MAX_RISK_PER_TRADE*confidence
 
-    return (
-        np.array(results),
-        weights_record
+# Portfolio allocation
+def allocate_portfolio(signals, confidence, capital):
+
+    allocation=[]
+
+    for s,c in zip(signals,confidence):
+
+        if s=="HOLD":
+            allocation.append(0)
+
+        else:
+            allocation.append(position_size(capital,c))
+
+    return allocation
+
+# Rebalance
+def rebalance(weights):
+
+    weights=np.array(weights)
+
+    return weights/weights.sum()
+
+# Complete pipeline
+def optimize_portfolio(mean_returns,covariance):
+
+    sharpe=max_sharpe_portfolio(
+        mean_returns,
+        covariance
     )
+
+    minimum=minimum_variance_portfolio(
+        mean_returns,
+        covariance
+    )
+
+    frontier=efficient_frontier(
+        5000,
+        mean_returns,
+        covariance
+    )
+
+    return {
+        "max_sharpe":sharpe,
+        "min_variance":minimum,
+        "frontier":frontier
+    }
+
+if __name__=="__main__":
+    print("Portfolio Module Loaded")
