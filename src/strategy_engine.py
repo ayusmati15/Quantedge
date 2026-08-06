@@ -1,97 +1,128 @@
-import numpy as np
+import pandas as pd
+
+from regime_detection import detect_regime
+from signal_generator import (
+    ensemble_probability,
+    probability_to_signal,
+    confidence_score,
+    confidence_filter
+)
 
 
-def rsi_strategy(df):
+# Generate trading signals
+def generate_strategy(
+    df,
+    rf_probs,
+    ann_probs,
+    lstm_probs,
+    transformer_probs
+):
 
-    df = df.copy()
+    df = detect_regime(df)
 
-    df["RSI_Signal"] = 0
+    probabilities = []
+    signals = []
+    confidence = []
 
-    df.loc[
-        df["RSI"] < 30,
-        "RSI_Signal"
-    ] = 1
+    for i in range(len(df)):
 
-    df.loc[
-        df["RSI"] > 70,
-        "RSI_Signal"
-    ] = -1
+        p = ensemble_probability(
+            rf_probs[i],
+            ann_probs[i],
+            lstm_probs[i],
+            transformer_probs[i]
+        )
 
-    return df
+        s = probability_to_signal(p)
 
+        c = confidence_score(p)
 
-def macd_strategy(df):
+        regime = df["Regime"].iloc[i]
 
-    df = df.copy()
+        if regime == "bearish" and s == "BUY":
+            s = "HOLD"
 
-    df["MACD_Signal_Strategy"] = 0
+        elif regime == "bullish" and s == "SELL":
+            s = "HOLD"
 
-    df.loc[
-        df["MACD"] > df["MACD_Signal"],
-        "MACD_Signal_Strategy"
-    ] = 1
+        s = confidence_filter(s, c)
 
-    df.loc[
-        df["MACD"] < df["MACD_Signal"],
-        "MACD_Signal_Strategy"
-    ] = -1
+        probabilities.append(p)
+        confidence.append(c)
+        signals.append(s)
 
-    return df
-
-
-def hybrid_strategy(df):
-
-    df = rsi_strategy(df)
-
-    df = macd_strategy(df)
-
-    df["Hybrid_Signal"] = 0
-
-    buy_condition = (
-        (df["RSI_Signal"] == 1)
-        &
-        (df["MACD_Signal_Strategy"] == 1)
-    )
-
-    sell_condition = (
-        (df["RSI_Signal"] == -1)
-        &
-        (df["MACD_Signal_Strategy"] == -1)
-    )
-
-    df.loc[
-        buy_condition,
-        "Hybrid_Signal"
-    ] = 1
-
-    df.loc[
-        sell_condition,
-        "Hybrid_Signal"
-    ] = -1
+    df["Probability"] = probabilities
+    df["Confidence"] = confidence
+    df["Signal"] = signals
 
     return df
 
 
-def calculate_strategy_returns(df):
+# Position values
+def create_positions(df):
+
+    position = []
+
+    current = 0
+
+    for signal in df["Signal"]:
+
+        if signal == "BUY":
+            current = 1
+
+        elif signal == "SELL":
+            current = -1
+
+        position.append(current)
+
+    df["Position"] = position
+
+    return df
+
+
+# Strategy returns
+def strategy_returns(df):
 
     df = df.copy()
 
-    df["Market_Return"] = (
-        df["Close"]
-        .pct_change()
-        .fillna(0)
-    )
+    df["Market_Return"] = df["Close"].pct_change().fillna(0)
 
     df["Strategy_Return"] = (
-        df["Hybrid_Signal"]
-        .shift(1)
-        .fillna(0)
-        *
-        df["Market_Return"]
+        df["Position"].shift(1).fillna(0)
+        * df["Market_Return"]
     )
 
-    df["Cumulative_Strategy"] = (
+    df["Cumulative_Return"] = (
         1 + df["Strategy_Return"]
     ).cumprod()
 
     return df
+
+
+# Complete pipeline
+def run_strategy(
+    df,
+    rf_probs,
+    ann_probs,
+    lstm_probs,
+    transformer_probs
+):
+
+    df = generate_strategy(
+        df,
+        rf_probs,
+        ann_probs,
+        lstm_probs,
+        transformer_probs
+    )
+
+    df = create_positions(df)
+
+    df = strategy_returns(df)
+
+    return df
+
+
+if __name__ == "__main__":
+
+    print("Strategy Engine Loaded")
