@@ -10,7 +10,10 @@ Modify values here instead of changing code inside modules.
 Author : Ayusmati Panda
 Project : Quantedge
 """
-
+TRANSACTION_COST = 0.001
+SLIPPAGE = 0.0005
+MAX_RISK_PER_TRADE = 0.02
+RISK_FREE_RATE = 0.05
 # ==========================================================
 # DATA SETTINGS
 # ==========================================================
